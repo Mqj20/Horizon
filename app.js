@@ -1,61 +1,69 @@
-const CONFIG_URL = "https://cdn.jsdelivr.net/gh/Mqj20/Horizon@main/config.json";
 const LABELS = { live: "بث مباشر", movies: "أفلام", series: "مسلسلات" };
 
-async function loadConfig() {
-  const res = await fetch(CONFIG_URL + "?t=" + Date.now());
-  return res.json();
+// رابط القنوات الخاص بك
+const M3U_URL = "http://shoftv.net:80/get.php?username=28365536&password=5839836&type=m3u_plus&output=ts";
+
+async function fetchM3U() {
+  // نستخدم وسيط قوي جداً مخصص للملفات النصية
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(M3U_URL)}`;
+  
+  const response = await fetch(proxyUrl);
+  if (!response.ok) throw new Error("فشل تحميل الملف");
+  
+  const text = await response.text();
+  return parseM3U(text);
 }
 
-// دالة الجلب المعدلة لتجربة 3 وسائط تلقائياً
-async function fetchXtream(cfg, action) {
-  const { server, username, password } = cfg.xtream;
-  const targetUrl = `${server}/player_api.php?username=${username}&password=${password}&action=${action}`;
-  
-  // قائمة بالوسائط المجانية التي سنجربها بالترتيب
-  const proxies = [
-    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(targetUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
-  ];
+function parseM3U(text) {
+  const lines = text.split('\n');
+  let live = [], movies = [], series = [];
+  let currentInfo = null;
 
-  for (let i = 0; i < proxies.length; i++) {
-    try {
-      console.log(`محاولة الاتصال بالوسيط رقم ${i + 1}...`);
-      const r = await fetch(proxies[i]);
-      if (!r.ok) continue; // إذا فشل، جرب الوسيط التالي
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (line.startsWith('#EXTINF:')) {
+      // استخراج اسم القناة
+      const nameMatch = line.match(/,(.*)$/);
+      const name = nameMatch ? nameMatch[1] : "بدون اسم";
       
-      const data = await r.json();
-      if (data && !data.error) {
-        console.log(`نجح الوسيط رقم ${i + 1}!`);
-        return data; // نجح الاتصال، أرجع البيانات
+      // تحديد النوع
+      let type = "live";
+      if (line.includes('tvg-type="movie"') || line.includes('movie')) type = "movies";
+      if (line.includes('tvg-type="series"') || line.includes('series')) type = "series";
+      
+      currentInfo = { name, type };
+    } else if (line.startsWith('http')) {
+      if (currentInfo) {
+        const item = { name: currentInfo.name, streamUrl: line };
+        if (currentInfo.type === "live") live.push(item);
+        else if (currentInfo.type === "movies") movies.push(item);
+        else if (currentInfo.type === "series") series.push(item);
+        currentInfo = null;
       }
-    } catch (e) {
-      console.log(`الوسيط رقم ${i + 1} فشل:`, e.message);
-      // ننتقل تلقائياً للوسيط التالي في الحلقة
     }
   }
   
-  // إذا فشلت كل الوسائط
-  throw new Error("فشل الاتصال بالسيرفر عبر جميع الوسائط. يرجى التحقق من الرابط أو تجربة شبكة أخرى.");
+  // لتقليل الضغط على التطبيق، سنأخذ أول 500 قناة فقط (يمكنك زيادتها لاحقاً)
+  return { live: live.slice(0, 500), movies: movies.slice(0, 500), series: series.slice(0, 500) };
 }
 
-function render(cfg, data) {
-  document.getElementById("announcement").textContent = cfg.announcement || "";
+function render(data) {
+  document.getElementById("announcement").textContent = "مرحبًا بكم في Horizon TV";
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
 
-  for (const section of cfg.sections) {
+  for (const section of ["live", "movies", "series"]) {
     const card = document.createElement("div");
     card.className = "card";
-    card.innerHTML = `<h3>${LABELS[section] || section}</h3>`;
+    card.innerHTML = `<h3>${LABELS[section]}</h3>`;
     card.addEventListener("click", () => {
-      openSection(cfg, section, data);
+      openSection(section, data);
     });
     grid.appendChild(card);
   }
 }
 
-async function openSection(cfg, section, data) {
+function openSection(section, data) {
   const items = data[section] || [];
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
@@ -63,29 +71,26 @@ async function openSection(cfg, section, data) {
   const back = document.createElement("div");
   back.className = "card";
   back.textContent = "← رجوع";
-  back.onclick = () => render(cfg, data);
+  back.onclick = () => render(data);
   grid.appendChild(back);
 
   if (items.length === 0) {
     const emptyMsg = document.createElement("div");
     emptyMsg.className = "card";
     emptyMsg.style = "grid-column: 1 / -1; text-align: center; color: #ffb74d;";
-    emptyMsg.textContent = "لا توجد عناصر في هذا القسم أو حدث خطأ في التحميل.";
+    emptyMsg.textContent = "جاري التحميل أو لا توجد عناصر...";
     grid.appendChild(emptyMsg);
   }
 
-  for (const item of items) {
+  items.forEach(item => {
     const card = document.createElement("div");
     card.className = "card";
     card.textContent = item.name;
-    card.onclick = () => {
-      playVideo(item.streamUrl);
-    };
+    card.onclick = () => playVideo(item.streamUrl);
     grid.appendChild(card);
-  }
+  });
 }
 
-// --- دالة تشغيل الفيديو ---
 function playVideo(url) {
   let overlay = document.getElementById("video-overlay");
   if (!overlay) {
@@ -120,29 +125,12 @@ function playVideo(url) {
 }
 
 async function boot() {
-  const cfg = await loadConfig();
-  let data = { live: [], movies: [], series: [] };
-
-  if (cfg.xtreamEnabled) {
-    try {
-      // جلب القنوات والأفلام
-      const [live, vod] = await Promise.all([
-        fetchXtream(cfg, "get_live_streams"),
-        fetchXtream(cfg, "get_vod_streams")
-      ]);
-      
-      if (Array.isArray(live)) {
-        data.live = live.map(x => ({ name: x.name, streamUrl: `${cfg.xtream.server}/live/${cfg.xtream.username}/${cfg.xtream.password}/${x.stream_id}.m3u8` }));
-      }
-      if (Array.isArray(vod)) {
-        data.movies = vod.map(x => ({ name: x.name, streamUrl: `${cfg.xtream.server}/movie/${cfg.xtream.username}/${cfg.xtream.password}/${x.stream_id}.${x.container_extension}` }));
-      }
-    } catch (e) {
-      console.error(e);
-      alert("حدث خطأ: " + e.message);
-    }
+  try {
+    const data = await fetchM3U();
+    render(data);
+  } catch (e) {
+    alert("حدث خطأ أثناء جلب الملف: " + e.message);
   }
-  render(cfg, data);
 }
 
 boot();
