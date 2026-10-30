@@ -6,10 +6,15 @@ async function loadConfig() {
   return res.json();
 }
 
+// دالة الجلب المعدلة لتستخدم وسيط CORS
 async function fetchXtream(cfg, action) {
   const { server, username, password } = cfg.xtream;
-  const url = `${server}/player_api.php?username=${username}&password=${password}&action=${action}`;
-  const r = await fetch(url);
+  const targetUrl = `${server}/player_api.php?username=${username}&password=${password}&action=${action}`;
+  
+  // استخدام وسيط لتجاوز حظر HTTP وحظر CORS
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+  
+  const r = await fetch(proxyUrl);
   return r.json();
 }
 
