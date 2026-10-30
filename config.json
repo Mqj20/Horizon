@@ -3,7 +3,7 @@
   "appName": "Horizon TV",
   "xtreamEnabled": true,
   "xtream": {
-    "server": "http://shoftv.net:80",
+    "server": "https://shoftv.net",
     "username": "28365536",
     "password": "5839836"
   },
