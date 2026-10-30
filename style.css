@@ -1,0 +1,18 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, sans-serif;
+  background: #0b0b12; color: #eee;
+  padding: 24px;
+}
+#topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+#announcement { color: #ffb74d; font-size: 14px; }
+#grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.card {
+  background: #181826; border-radius: 14px;
+  padding: 20px; cursor: pointer;
+  transition: transform .15s, background .15s;
+}
+.card:hover, .card:focus { transform: scale(1.04); background: #23233a; }
