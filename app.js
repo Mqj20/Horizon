@@ -6,16 +6,37 @@ async function loadConfig() {
   return res.json();
 }
 
-// دالة الجلب المعدلة لتستخدم وسيط CORS
+// دالة الجلب المعدلة لتجربة 3 وسائط تلقائياً
 async function fetchXtream(cfg, action) {
   const { server, username, password } = cfg.xtream;
   const targetUrl = `${server}/player_api.php?username=${username}&password=${password}&action=${action}`;
   
-  // استخدام وسيط لتجاوز حظر HTTP وحظر CORS
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+  // قائمة بالوسائط المجانية التي سنجربها بالترتيب
+  const proxies = [
+    `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(targetUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
+  ];
+
+  for (let i = 0; i < proxies.length; i++) {
+    try {
+      console.log(`محاولة الاتصال بالوسيط رقم ${i + 1}...`);
+      const r = await fetch(proxies[i]);
+      if (!r.ok) continue; // إذا فشل، جرب الوسيط التالي
+      
+      const data = await r.json();
+      if (data && !data.error) {
+        console.log(`نجح الوسيط رقم ${i + 1}!`);
+        return data; // نجح الاتصال، أرجع البيانات
+      }
+    } catch (e) {
+      console.log(`الوسيط رقم ${i + 1} فشل:`, e.message);
+      // ننتقل تلقائياً للوسيط التالي في الحلقة
+    }
+  }
   
-  const r = await fetch(proxyUrl);
-  return r.json();
+  // إذا فشلت كل الوسائط
+  throw new Error("فشل الاتصال بالسيرفر عبر جميع الوسائط. يرجى التحقق من الرابط أو تجربة شبكة أخرى.");
 }
 
 function render(cfg, data) {
@@ -104,6 +125,7 @@ async function boot() {
 
   if (cfg.xtreamEnabled) {
     try {
+      // جلب القنوات والأفلام
       const [live, vod] = await Promise.all([
         fetchXtream(cfg, "get_live_streams"),
         fetchXtream(cfg, "get_vod_streams")
@@ -117,7 +139,7 @@ async function boot() {
       }
     } catch (e) {
       console.error(e);
-      alert("حدث خطأ في جلب البيانات: " + e.message);
+      alert("حدث خطأ: " + e.message);
     }
   }
   render(cfg, data);
