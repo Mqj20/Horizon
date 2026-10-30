@@ -3,15 +3,246 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
-  <title>Horizon TV</title>
+  <title>Horizon Sports</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #09090e;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .mobile-container {
+      width: 100%;
+      max-width: 480px;
+      background: #11111b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 0 40px rgba(0,0,0,0.8);
+    }
+    header {
+      padding: 20px 16px;
+      background: rgba(17, 17, 27, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 800;
+      background: linear-gradient(45deg, #ff4b4b, #ff8533);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    .search-box {
+      width: 100%;
+      padding: 12px 16px;
+      background: #1a1a28;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    .search-box:focus { border-color: #ff4b4b; }
+    main { padding: 16px; flex: 1; }
+    .status-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: #888;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .card {
+      background: #181826;
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.03);
+      transition: transform 0.1s ease;
+    }
+    .card:active { transform: scale(0.96); }
+    .card.bein { border-color: rgba(138, 43, 226, 0.4); background: #1a1528; }
+    .card-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+    
+    /* Video Overlay */
+    #player-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #000;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+    }
+    video { width: 100%; max-height: 70vh; background: #000; }
+    .close-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+    }
+  </style>
 </head>
 <body>
-  <header id="topbar">
-    <h1>Horizon TV</h1>
-    <div id="announcement"></div>
+
+<div class="mobile-container">
+  <header>
+    <div class="title">⚽ Horizon Sports Live</div>
+    <input type="text" id="searchInput" class="search-box" placeholder="ابحث عن قناة...">
   </header>
-  <main id="grid"></main>
-  <script src="app.js"></script>
+
+  <main>
+    <div id="content" class="status-msg">جاري الاتصال بالسيرفر وتحديث القنوات...</div>
+  </main>
+</div>
+
+<div id="player-modal">
+  <button class="close-btn" onclick="closePlayer()">إغلاق ✖</button>
+  <video id="videoPlayer" controls autoplay playsinline></video>
+</div>
+
+<script>
+  // بيانات الاشتراك المباشرة
+  const SERVER = "http://shoftv.net:80";
+  const USER   = "28365536";
+  const PASS   = "5839836";
+
+  let allChannels = [];
+  let hlsInstance = null;
+
+  async function loadChannels() {
+    const content = document.getElementById("content");
+    
+    // تجربة أكثر من خيار جلب للبيانات وتجاوز CORS
+    const targetUrl = `${SERVER}/player_api.php?username=${USER}&password=${PASS}&action=get_live_streams`;
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
+    try {
+      const res = await fetch(proxyUrl);
+      if(!res.ok) throw new Error("فشل الاتصال بالسيرفر");
+      const data = await res.json();
+
+      // فلترة القنوات الرياضية فقط
+      allChannels = data.filter(ch => {
+        const name = (ch.name || "").toLowerCase();
+        return name.includes("sport") || name.includes("bein") || name.includes("رياضة") || name.includes("كأس") || name.includes("دوري");
+      });
+
+      if(allChannels.length === 0) {
+        content.innerHTML = "<div class='status-msg'>لم يتم العثور على قنوات رياضية، أو أن الاشتراك انتهى.</div>";
+        return;
+      }
+
+      renderChannels(allChannels);
+    } catch(err) {
+      content.innerHTML = `
+        <div class='status-msg' style='color:#ff4b4b;'>
+          فشل تحميل القنوات.<br><br>
+          <small>قد يكون السبب انتهاء فترة الاشتراك أو حظر اتصال السيرفر.</small><br><br>
+          <button onclick="loadChannels()" style="padding:8px 16px; border-radius:8px; border:none; background:#fff; cursor:pointer;">إعادة المحاولة</button>
+        </div>`;
+    }
+  }
+
+  function renderChannels(channels) {
+    const content = document.getElementById("content");
+    if(channels.length === 0) {
+      content.innerHTML = "<div class='status-msg'>لا توجد نتائج تطابق البحث.</div>";
+      return;
+    }
+
+    let html = `<div class="grid">`;
+    channels.forEach(ch => {
+      const isBein = ch.name.toLowerCase().includes("bein");
+      // تحضير رابط البث المباشر M3U8/TS
+      const streamUrl = `${SERVER}/live/${USER}/${PASS}/${ch.stream_id}.m3u8`;
+      
+      html += `
+        <div class="card ${isBein ? 'bein' : ''}" onclick="playStream('${streamUrl}')">
+          <div class="card-title">${ch.name}</div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    content.innerHTML = html;
+  }
+
+  function playStream(url) {
+    const modal = document.getElementById("player-modal");
+    const video = document.getElementById("videoPlayer");
+    modal.style.display = "flex";
+
+    // تدمير أي مشغل سابق
+    if (hlsInstance) {
+      hlsInstance.destroy();
+    }
+
+    if (Hls.isSupported()) {
+      hlsInstance = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+      });
+      hlsInstance.loadSource(url);
+      hlsInstance.attachMedia(video);
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+      
+      hlsInstance.on(Hls.Events.ERROR, function (event, data) {
+        if (data.fatal) {
+          // إذا فشل رابط m3u8، نجرب تحويله لـ .ts المباشر
+          const tsUrl = url.replace('.m3u8', '.ts');
+          video.src = tsUrl;
+          video.play();
+        }
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.play();
+    }
+  }
+
+  function closePlayer() {
+    const modal = document.getElementById("player-modal");
+    const video = document.getElementById("videoPlayer");
+    if (hlsInstance) hlsInstance.destroy();
+    video.pause();
+    video.src = "";
+    modal.style.display = "none";
+  }
+
+  document.getElementById("searchInput").addEventListener("input", (e) => {
+    const val = e.target.value.toLowerCase();
+    const filtered = allChannels.filter(c => c.name.toLowerCase().includes(val));
+    renderChannels(filtered);
+  });
+
+  loadChannels();
+</script>
+
 </body>
 </html>
