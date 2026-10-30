@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "appName": "Horizon TV",
+  "xtreamEnabled": true,
+  "xtream": {
+    "server": "http://your-server.com:8080",
+    "username": "your-username",
+    "password": "your-password"
+  },
+  "sections": ["live", "movies", "series"],
+  "announcement": "مرحبًا بكم في Horizon TV"
+}
