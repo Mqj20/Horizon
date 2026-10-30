@@ -1,20 +1,14 @@
 {
   "app_config": {
     "app_name": "MQJ STREAM",
-    "theme": {
-      "primary_color": "#a855f7",
-      "background_color": "#07070a",
-      "card_background": "#181822",
-      "text_color": "#ffffff",
-      "accent_color": "#ec4899"
-    }
+    "theme": { ... }
   },
   "sections": [
     {
       "id": "sports_channels",
-      "title": "⚽ قنوات الرياضة والبث المباشر",
+      "title": "قنوات البث المباشر",
       "type": "native_stream",
-      "playlist_url": "http://neo-4k.xyz:80/get.php?username=007c2d8e6c63&password=1deddbb541&type=m3u_plus"
+      "playlist_url": "http://neo-4k.xyz:80/get.php?user=..."
     }
   ]
 }
