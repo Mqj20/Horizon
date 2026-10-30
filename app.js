@@ -1,70 +1,69 @@
-const LABELS = { live: "بث مباشر", movies: "أفلام", series: "مسلسلات" };
-
-// رابط القنوات الخاص بك
-const M3U_URL = "http://shoftv.net:80/get.php?username=28365536&password=5839836&type=m3u_plus&output=ts";
+// الرابط الخاص بك
+const M3U_URL = "http://shoftv.net:80/get.php?username=28365536&password=5839836&type=m3u_plus&output=m3u8";
 
 async function fetchM3U() {
-  // نستخدم وسيط قوي جداً مخصص للملفات النصية
   const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(M3U_URL)}`;
-  
   const response = await fetch(proxyUrl);
-  if (!response.ok) throw new Error("فشل تحميل الملف");
-  
+  if (!response.ok) throw new Error("فشل الاتصال بالوسيط");
   const text = await response.text();
   return parseM3U(text);
 }
 
+// دالة الفلترة: تبحث فقط عن القنوات الرياضية
 function parseM3U(text) {
   const lines = text.split('\n');
-  let live = [], movies = [], series = [];
+  let sports = [];
   let currentInfo = null;
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
+    
     if (line.startsWith('#EXTINF:')) {
-      // استخراج اسم القناة
       const nameMatch = line.match(/,(.*)$/);
-      const name = nameMatch ? nameMatch[1] : "بدون اسم";
+      const name = nameMatch ? nameMatch[1] : "قناة رياضية";
+      const lowerLine = line.toLowerCase();
       
-      // تحديد النوع
-      let type = "live";
-      if (line.includes('tvg-type="movie"') || line.includes('movie')) type = "movies";
-      if (line.includes('tvg-type="series"') || line.includes('series')) type = "series";
-      
-      currentInfo = { name, type };
+      // فلترة القنوات الرياضية (سبورت، بي إن سبورت، كأس، دوري)
+      if (
+        lowerLine.includes('sport') || 
+        lowerLine.includes('bein') || 
+        line.includes('رياضة') || 
+        line.includes('بي ان') ||
+        line.includes('كأس') ||
+        line.includes('دوري')
+      ) {
+        currentInfo = { name };
+      } else {
+        currentInfo = null; // تجاهل باقي القنوات
+      }
     } else if (line.startsWith('http')) {
       if (currentInfo) {
-        const item = { name: currentInfo.name, streamUrl: line };
-        if (currentInfo.type === "live") live.push(item);
-        else if (currentInfo.type === "movies") movies.push(item);
-        else if (currentInfo.type === "series") series.push(item);
+        sports.push({ name: currentInfo.name, streamUrl: line });
         currentInfo = null;
       }
     }
   }
   
-  // لتقليل الضغط على التطبيق، سنأخذ أول 500 قناة فقط (يمكنك زيادتها لاحقاً)
-  return { live: live.slice(0, 500), movies: movies.slice(0, 500), series: series.slice(0, 500) };
+  return { sports: sports };
 }
 
+// عرض الواجهة الرئيسية (خانة واحدة فقط)
 function render(data) {
-  document.getElementById("announcement").textContent = "مرحبًا بكم في Horizon TV";
+  document.getElementById("announcement").textContent = "مرحبًا بكم في Horizon Sports";
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
 
-  for (const section of ["live", "movies", "series"]) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<h3>${LABELS[section]}</h3>`;
-    card.addEventListener("click", () => {
-      openSection(section, data);
-    });
-    grid.appendChild(card);
-  }
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<h3 style="text-align:center; font-size: 24px;">⚽ البث الرياضي المباشر</h3>`;
+  card.addEventListener("click", () => {
+    openSection(data);
+  });
+  grid.appendChild(card);
 }
 
-function openSection(section, data) {
-  const items = data[section] || [];
+function openSection(data) {
+  const items = data.sports || [];
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
 
@@ -78,7 +77,7 @@ function openSection(section, data) {
     const emptyMsg = document.createElement("div");
     emptyMsg.className = "card";
     emptyMsg.style = "grid-column: 1 / -1; text-align: center; color: #ffb74d;";
-    emptyMsg.textContent = "جاري التحميل أو لا توجد عناصر...";
+    emptyMsg.textContent = "لم يتم العثور على قنوات رياضية في القائمة.";
     grid.appendChild(emptyMsg);
   }
 
@@ -86,6 +85,10 @@ function openSection(section, data) {
     const card = document.createElement("div");
     card.className = "card";
     card.textContent = item.name;
+    // إضافة لون مميز لقنوات beIN
+    if(item.name.toLowerCase().includes('bein')) {
+        card.style.border = "1px solid #8a2be2"; 
+    }
     card.onclick = () => playVideo(item.streamUrl);
     grid.appendChild(card);
   });
@@ -125,11 +128,22 @@ function playVideo(url) {
 }
 
 async function boot() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "<div style='color:white; font-size:20px; grid-column: 1/-1; text-align:center;'>جاري البحث عن القنوات الرياضية...<br>قد يستغرق هذا بضع ثوانٍ</div>";
+  
   try {
     const data = await fetchM3U();
+    
+    if(data.sports.length === 0) {
+       throw new Error("تم التحميل لكن لم نجد قنوات رياضية. قد يكون الوسيط فشل في جلب الملف.");
+    }
+    
     render(data);
   } catch (e) {
-    alert("حدث خطأ أثناء جلب الملف: " + e.message);
+    grid.innerHTML = `<div style='color:red; font-size:18px; grid-column: 1/-1; text-align:center;'>
+      فشل التحميل: <br>${e.message}<br><br>
+      <button onclick="location.reload()" style="padding:10px; margin-top:10px; border-radius:10px; color:black;">إعادة المحاولة</button>
+    </div>`;
   }
 }
 
