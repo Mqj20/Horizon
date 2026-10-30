@@ -3,9 +3,9 @@
   "appName": "Horizon TV",
   "xtreamEnabled": true,
   "xtream": {
-    "server": "http://your-server.com:8080",
-    "username": "your-username",
-    "password": "your-password"
+    "server": "http://shoftv.net:80",
+    "username": "28365536",
+    "password": "5839836"
   },
   "sections": ["live", "movies", "series"],
   "announcement": "مرحبًا بكم في Horizon TV"
